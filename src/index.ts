@@ -84,11 +84,18 @@ export type Options = {
   license?: string
 }
 
+export type SubmitOptions = {
+  filePath: string
+  version?: string
+  sourcePath?: string
+  approvalNotes?: string
+}
+
 export const errorMap = {
   apiKey:
-    "API Key is required. To get one: https://addons.mozilla.org/en-US/developers/addon/api/key",
+      "API Key is required. To get one: https://addons.mozilla.org/en-US/developers/addon/api/key",
   apiSecret:
-    "API Secret is required. To get one: https://addons.mozilla.org/en-US/developers/addon/api/key"
+      "API Secret is required. To get one: https://addons.mozilla.org/en-US/developers/addon/api/key"
 }
 
 export const requiredFields = Object.keys(errorMap)
@@ -100,7 +107,7 @@ export class MozillaAddonsAPI {
 
   get productEndpoint() {
     return `${baseApiUrl}/v5/addons/addon/${encodeURIComponent(
-      this.options.extId
+        this.options.extId
     )}`
   }
 
@@ -115,9 +122,9 @@ export class MozillaAddonsAPI {
 
     // Make sure it's not an email-based extID
     if (
-      typeof this.options.extId === "string" &&
-      this.options.extId.length > 0 &&
-      !this.options.extId.includes("@")
+        typeof this.options.extId === "string" &&
+        this.options.extId.length > 0 &&
+        !this.options.extId.includes("@")
     ) {
       if (!this.options.extId.startsWith("{")) {
         this.options.extId = "{" + options.extId
@@ -137,20 +144,27 @@ export class MozillaAddonsAPI {
     }
   }
 
-  submit = async ({ filePath, version = "1.0.0" }) => {
+  submit = async (
+      {
+        filePath,
+        approvalNotes = null,
+        sourcePath = null,
+        version = "1.0.0"
+      }: SubmitOptions
+  ) => {
     const uploadResult = await this.uploadFile({
       filePath
     })
 
     const uploadValidated = await retry(
-      async () => {
-        const uploadStatus = await this.getUpload({
-          uploadUuid: uploadResult.uuid
-        })
-        return uploadStatus.valid
-      },
-      8,
-      2400
+        async () => {
+          const uploadStatus = await this.getUpload({
+            uploadUuid: uploadResult.uuid
+          })
+          return uploadStatus.valid
+        },
+        8,
+        2400
     )
 
     // Wait for upload to be validated
@@ -160,7 +174,9 @@ export class MozillaAddonsAPI {
 
     return await this.createVersion({
       uploadUuid: uploadResult.uuid,
-      version
+      version,
+      approvalNotes,
+      sourcePath
     })
   }
 
@@ -195,7 +211,14 @@ export class MozillaAddonsAPI {
     return JSON.parse(resp.body) as UploadResponse
   }
 
-  createVersion = async ({ uploadUuid, version }) => {
+  createVersion = async (
+      {
+        uploadUuid,
+        version,
+        approvalNotes,
+        sourcePath,
+      }
+  ) => {
     const accessToken = await this.getAccessToken()
 
     // https://addons-server.readthedocs.io/en/latest/topics/api/addons.html#version-create
@@ -203,6 +226,17 @@ export class MozillaAddonsAPI {
 
     const formData = new FormData()
     formData.append("upload", uploadUuid)
+
+    if (sourcePath) {
+      formData.append('source', await fileFromPath(sourcePath))
+    } else {
+      formData.append('source', '')
+    }
+
+    if (approvalNotes) {
+      formData.append('approval_notes', approvalNotes);
+    }
+
     if (!!this.options.license) {
       formData.append("license", this.options.license)
     }
@@ -237,28 +271,28 @@ export class MozillaAddonsAPI {
     const addonEndpoint = `${baseApiUrl}/v5/addons/upload/${uploadUuid}`
 
     return got
-      .get(addonEndpoint, {
-        headers: {
-          Authorization: `JWT ${accessToken}`
-        }
-      })
-      .json<UploadResponse>()
+        .get(addonEndpoint, {
+          headers: {
+            Authorization: `JWT ${accessToken}`
+          }
+        })
+        .json<UploadResponse>()
   }
 
   getVersion = async ({ version = "1.0.0" }) => {
     const accessToken = await this.getAccessToken()
 
     const addonEndpoint = `${
-      this.productEndpoint
+        this.productEndpoint
     }/versions/${encodeURIComponent(version)}/`
 
     return got
-      .get(addonEndpoint, {
-        headers: {
-          Authorization: `JWT ${accessToken}`
-        }
-      })
-      .json<VersionResponse>()
+        .get(addonEndpoint, {
+          headers: {
+            Authorization: `JWT ${accessToken}`
+          }
+        })
+        .json<VersionResponse>()
   }
 
   getProfile = async () => {
@@ -267,12 +301,12 @@ export class MozillaAddonsAPI {
     const profileEndpoint = `${baseApiUrl}/v5/accounts/profile`
 
     return got
-      .get(profileEndpoint, {
-        headers: {
-          Authorization: `JWT ${accessToken}`
-        }
-      })
-      .json<ProfileResponse>()
+        .get(profileEndpoint, {
+          headers: {
+            Authorization: `JWT ${accessToken}`
+          }
+        })
+        .json<ProfileResponse>()
   }
 
   getAccessToken = async () => {
